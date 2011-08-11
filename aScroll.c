@@ -8,113 +8,164 @@
 
 #include "usetable.h"
 
-/*
-void main_walle(void) {
-  int blink_it = 0;
-  int sine_len = 100;
-  //int sine_table[sine_len];
-  //for(int i=0;i<sine_len;i++){
-  //  sine_table[i] = 
-  //}
-  int sintable[100]={0,0,1,2,3,4,5,6,7,8,9,10,11,11,12,13,14,15,16,16,17,18,19,19,20,21,21,22,23,23,24,24,25,25,26,26,27,27,27,28,28,28,29,29,29,29,29,29,29,29,30,29,29,29,29,29,29,29,29,28,28,28,27,27,27,26,26,25,25,24,24,23,23,22,21,21,20,19,19,18,17,16,16,15,14,13,12,11,11,10,9,8,7,6,5,4,3,2,1,0}; 
-
-  font=&Font_Orbitron14pt;
-  int y_offset=0; 
-  int xscroll=0;
-
-
-  //backlightSetBrightness(GLOBAL(lcdbacklight));
-  backlightSetBrightness( 20 );
-  
-  gpioSetValue( RB_LED3, 1 ); //backlighting
-  while(1){
-    y_offset++;
-    y_offset=y_offset%100;
-
-    if( (y_offset%5) == 0 ) xscroll++;
-    xscroll=xscroll%200;
-    //if(y_offset>99) y_offset=0;
-    //DoString(1,40-sintable[y_offset],"wALLe !");
-
-    DoString(1,  40-sintable[ (y_offset)%100]    , "w" );
-    DoString(26, 40-sintable[ (y_offset+8)%100  ], "A" );
-    DoString(44, 40-sintable[ (y_offset+16)%100 ], "L" );
-    DoString(60, 40-sintable[ (y_offset+24)%100 ], "L" );
-    DoString(78, 40-sintable[ (y_offset+32)%100 ], "e" );
-    //DoString(92, 40-sintable[ (y_offset+40)%100 ], "!" );
-    
-    if ( (y_offset%30)==0){ 
-      blink_it = 1-blink_it;
-    }
-    if (y_offset>50) backlightSetBrightness( 10 );
-    else backlightSetBrightness( 45 );
-
-    gpioSetValue( RB_LED0, blink_it ); //
-    gpioSetValue( RB_LED1, blink_it ); //
-    gpioSetValue( RB_LED2, blink_it ); //
-    
-    //draw_nh_logo(-80+xscroll, 20);
-    
-    lcdDisplay();
-    delayms(10);
-    lcdFill(0); //clear screen
-  }
-*/
-
+#define WIDTH 96
+#define HEIGHT 68
+#define SCALE 128
 static int SINTABLE[100]={0,0,1,2,3,4,5,6,7,8,9,10,11,11,12,13,14,15,16,16,17,18,19,19,20,21,21,22,23,23,24,24,25,25,26,26,27,27,27,28,28,28,29,29,29,29,29,29,29,29,30,29,29,29,29,29,29,29,29,28,28,28,27,27,27,26,26,25,25,24,24,23,23,22,21,21,20,19,19,18,17,16,16,15,14,13,12,11,11,10,9,8,7,6,5,4,3,2,1,0}; 
 
+// key repeat delay stuff
+const int KEY_REPEAT_DELEAY = 15;
+int key_rep[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
 void ram(void) {
+	// setup nick scroll
+	bool show_nick = true;
 	int NICK_LEN = 0;
-	int x = 0;
-	int direction = 1; // 0 = right, 1 = left
-	int y_offset=0; 
+	int nick_x = 0;
+	int nick_direction = 0;
+	int nick_y_offset=0; 
 	char * nick = GLOBAL(nickname);
 
     lcdClear();
 	setExtFont(GLOBAL(nickfont));
 	NICK_LEN = DoString(0,12, nick);
-	x = -NICK_LEN;
+	nick_x = (WIDTH-NICK_LEN)/2;
+
+	// setup starfield
+	bool show_stars = true;
+	int nstars = 100;
+	int x[ nstars ];
+	int y[ nstars ];
+	int age[ nstars ];
 	
+	for( int i = 0; i < nstars; i++ ) {
+		x[ i ] = ( getRandom() % ( WIDTH * SCALE ) );
+		y[ i ] = ( getRandom() % ( HEIGHT * SCALE ) );
+		age[ i ] = 0;
+	}
+	
+	int step_counter = 0;
+	int raw_key, key;
+	
+	// main loop
 	while (1) {
-		//DoString(x,12,GLOBAL(nickname));
 		lcdClear();
 
-		int width = x;
-		for (int i = 0; i < strlen(nick); i++) {
-			char c = nick[i];
-			width = DoChar(width,  (96-getFontHeight())/2-SINTABLE[ (y_offset+i*8)%100] , c );			
+		// ****************************
+		// ***  drawing 
+		// ****************************
+		
+		// draw the nick
+		if (show_nick) {
+			int width = nick_x;
+			for (int i = 0; i < strlen(nick); i++) {
+				char c = nick[i];
+				width = DoChar(width,  (96-getFontHeight())/2-SINTABLE[ (nick_y_offset+i*8)%100] , c );			
+			}
 		}
+		
+		// draw the stars
+		if (show_stars) { 
+			for( int i = 0; i < nstars; i++ ) {
+				lcdSetPixel( x[ i ] / SCALE + 0, y[ i ] / SCALE + 0, 1 );
+				if( age[ i ] > 100 ) {
+					lcdSetPixel( x[ i ] / SCALE + 1, y[ i ] / SCALE + 0, 1 );
+					lcdSetPixel( x[ i ] / SCALE - 1, y[ i ] / SCALE + 0, 1 );
+					lcdSetPixel( x[ i ] / SCALE + 0, y[ i ] / SCALE + 1, 1 );
+					lcdSetPixel( x[ i ] / SCALE + 0, y[ i ] / SCALE - 1, 1 );
+				}
 
+				if( ( age[ i ] > 200 ) && ( step_counter % 4 == 0 ) ) {
+					lcdSetPixel( x[ i ] / SCALE + 1, y[ i ] / SCALE + 1, 1 );
+					lcdSetPixel( x[ i ] / SCALE + 1, y[ i ] / SCALE - 1, 1 );
+					lcdSetPixel( x[ i ] / SCALE - 1, y[ i ] / SCALE + 1, 1 );
+					lcdSetPixel( x[ i ] / SCALE - 1, y[ i ] / SCALE - 1, 1 );
+				}
+			}
+		}
+		
 	    lcdDisplay();
-		
-		if (direction) x--; else x++;
-		if (x > 96)
-			x = -NICK_LEN;
-		if (x < -NICK_LEN)
-			x = 96;
 
-		y_offset++;
-	    y_offset=y_offset%100;
-			
-		if (x%2 == 0) gpioSetValue (RB_LED0, 1-gpioGetValue(RB_LED0)); 
-	    if (x%2 == 1) gpioSetValue (RB_LED2, 1-gpioGetValue(RB_LED2)); 
+		// blinking leds are cool
+		if( step_counter == 0 ) {
+			gpioSetValue( RB_LED0, 1 - gpioGetValue( RB_LED0 ) );
+			gpioSetValue( RB_LED2, 1 - gpioGetValue( RB_LED2 ));
+		}
 		
-		char key=getInputRaw();
+		// ****************************
+		// ***  calculate next step 
+		// ****************************
+		
+		// calculate nick momevements
+		nick_x = nick_x + nick_direction;
+		if (nick_x > 96) nick_x = -NICK_LEN;
+		if (nick_x < -NICK_LEN) nick_x = 96;
+		nick_y_offset++;
+	    nick_y_offset=nick_y_offset%100;
+			
+		// calculate starfield
+		for (int i=0; i < nstars; i++) {
+			int oldx = x[ i ];
+			int oldy = y[ i ]; 
+			
+			int dx = x[ i ] - WIDTH * SCALE / 2;
+			int dy = y[ i ] - HEIGHT * SCALE / 2;
+			x[ i ] = WIDTH * SCALE / 2 + dx * 1005 / 1000;
+			y[ i ] = HEIGHT * SCALE / 2 + dy * 1005 / 1000;
+						
+			if( ( x[ i ] < 0 ) || ( x[ i ] > WIDTH * SCALE ) || ( y[ i ] < 0 ) || ( y[ i ] > HEIGHT * SCALE ) || ( ( oldx == x[ i ] ) && ( oldy == y[ i ] ) ) ) {
+				x[ i ] = ( getRandom() % ( WIDTH * SCALE ) );
+				y[ i ] = ( getRandom() % ( HEIGHT * SCALE ) );
+				age[ i ] = 0;
+			}
+			
+			age[ i ] = age[ i ] + 1;			
+		}
+		
+		// step counter MOD 50 to trigger the blinking every 50 steps
+		step_counter = (step_counter + 1)%50;
+		
+		// ****************************
+		// ***  control
+		// ****************************
+		
+		// check if we need to modify some params
+		raw_key = getInputRaw();
+		key = 0;
+		for(int i = 0; i < 5; i++) {
+			if(raw_key & (1 << i)) {
+				if(!key_rep[i] || key_rep[i] == KEY_REPEAT_DELEAY) key |= 1 << i;
+				key_rep[i] += key_rep[i] < KEY_REPEAT_DELEAY;
+			}
+			else key_rep[i] = 0;
+		}
+		
 		switch(key) {
-	        // Buttons: Right change speed, Up hold scrolling
 		case BTN_ENTER:
+			// ENTER for exiting the app
 		  return;
 		case BTN_RIGHT:
-			direction = 0;
+			// right to make the nick go faster to the right
+			if (nick_direction < 5) nick_direction++;
 			break; 
 		case BTN_UP:
+			show_nick = !show_nick;
+			if (show_nick) {
+				nick_x = (WIDTH-NICK_LEN)/2;
+				nick_direction = 0;				
+			}
 			break;
 		case BTN_LEFT:
-			direction = 1;
+			// left to make the nick go faster to the left
+			if (nick_direction > -5) nick_direction--;
 			break;
 		case BTN_DOWN:
+			// DOWN to switch starfield on or off
+			show_stars = !show_stars;
 			break;
 		}
-	    delayms_queue_plus(5,0);
+		
+		// wait and process queue
+	    delayms_queue_plus(2,0);
 	}
 }
